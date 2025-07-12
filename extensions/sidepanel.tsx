@@ -1,4 +1,4 @@
-import { createClient, type User } from "@supabase/supabase-js"
+import { type User } from "@supabase/supabase-js"
 import React, { useEffect, useRef, useState } from "react"
 
 import { Storage } from "@plasmohq/storage"
@@ -10,14 +10,13 @@ import "./style.css"
 import { useStorage } from "@plasmohq/storage/hook"
 
 import PanelLogin, { type LoginForm } from "~components/PanelLogin"
+import { supabase } from "~core/supabase"
 
-// import { supabase } from "~core/supabase"
+const storage = new Storage({
+  area: "local"
+})
 
 const API_KEY = process.env.PLASMO_PUBLIC_GEMINI_API_KEY
-const supabaseUrl = process.env.PLASMO_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.PLASMO_PUBLIC_SUPABASE_KEY
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 function IndexSidePanel() {
   const [conversation, setConversation] = useState([]) // chứa danh sách { role, content }
@@ -51,6 +50,7 @@ function IndexSidePanel() {
       console.log("session", session)
       if (session?.user) {
         setUser(session.user)
+        await storage.set("accessToken", session.access_token)
       }
     }
 
@@ -63,6 +63,7 @@ function IndexSidePanel() {
 
       if (session?.user) {
         setUser(session.user)
+        await storage.set("accessToken", session.access_token)
       } else {
         setUser(null)
       }
@@ -81,7 +82,7 @@ function IndexSidePanel() {
     setConversation((prev) => [...prev, newUserMessage])
     setQuestion("")
 
-    callBackgroundAction(newUserMessage.content)
+    semanticSearch(newUserMessage.content)
   }
 
   const generateEmbedding = async (): Promise<number[]> => {
@@ -129,7 +130,7 @@ function IndexSidePanel() {
     }
   }
 
-  const callBackgroundAction = async (content: string) => {
+  const semanticSearch = async (content: string) => {
     if (!content) return
     try {
       setLoadingAnswer(true)
