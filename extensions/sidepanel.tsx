@@ -16,8 +16,6 @@ const storage = new Storage({
   area: "local"
 })
 
-const API_KEY = process.env.PLASMO_PUBLIC_GEMINI_API_KEY
-
 function IndexSidePanel() {
   const [conversation, setConversation] = useState([]) // chứa danh sách { role, content }
   const [question, setQuestion] = useState("")
@@ -40,14 +38,11 @@ function IndexSidePanel() {
   }, [conversation])
 
   useEffect(() => {
-    console.log("check usser", user)
-
     const getSession = async () => {
       const {
         data: { session }
       } = await supabase.auth.getSession()
 
-      console.log("session", session)
       if (session?.user) {
         setUser(session.user)
         await storage.set("accessToken", session.access_token)
@@ -59,8 +54,6 @@ function IndexSidePanel() {
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("session", session)
-
       if (session?.user) {
         setUser(session.user)
         await storage.set("accessToken", session.access_token)
@@ -78,106 +71,50 @@ function IndexSidePanel() {
       return
     }
 
+    setLoadingAnswer(true)
+
     const newUserMessage = { role: "user", content: question }
     setConversation((prev) => [...prev, newUserMessage])
     setQuestion("")
 
-    semanticSearch(newUserMessage.content)
-  }
-
-  const generateEmbedding = async (): Promise<number[]> => {
-    const apiUrl =
-      "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent"
-
-    console.log("question", question)
-
-    const payload = {
-      model: "models/text-embedding-004",
-      content: {
-        parts: [
-          {
-            text: question
-          }
-        ]
+    const response = await chrome.runtime.sendMessage({
+      action: "ASK",
+      payload: {
+        question,
+        userId: user?.id
       }
+    })
+
+    const newAssistantMessage = {
+      role: "assistant",
+      content: response.success
+        ? response.data
+        : "❌ " + "Đã xảy ra lỗi khi trả lời."
     }
 
-    try {
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": API_KEY
-        },
-        body: JSON.stringify(payload)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(
-          `Lỗi API: ${response.status} - ${errorData.error.message}`
-        )
-      }
-
-      const result = await response.json()
-
-      console.log("embedding result:", result)
-
-      return result?.embedding?.values
-    } catch (error) {
-      console.error("Lỗi khi gọi Gemini API:", error)
-      throw error
+    setConversation((prev) => [...prev, newAssistantMessage])
+    if (!error) {
+      const keywords = response.data.map((i) => i.key_info.keywords).flat()
+      console.log("keywords", keywords)
+      setSuggestions([...new Set(keywords as string[])])
     }
-  }
-
-  const semanticSearch = async (content: string) => {
-    if (!content) return
-    try {
-      setLoadingAnswer(true)
-      setError("")
-
-      const queryEmbedding = await generateEmbedding()
-
-      const { data, error } = await supabase.rpc("match_bookmarks", {
-        query_embedding: queryEmbedding,
-        match_threshold: 0.65, // Ngưỡng tương tự (điều chỉnh khi cần)
-        match_count: 10, // Số lượng kết quả trả về
-        user_id_param: user.id // Truyền user_id để lọc kết quả
-      })
-
-      console.log("data", data)
-
-      const newAssistantMessage = {
-        role: "assistant",
-        content: !error ? data : "❌ " + "Đã xảy ra lỗi khi trả lời."
-      }
-
-      setConversation((prev) => [...prev, newAssistantMessage])
-      if (!error) {
-        const keywords = data.map((i) => i.key_info.keywords).flat()
-        console.log("keywords", keywords)
-        setSuggestions([...new Set(keywords as string[])])
-      }
-    } catch (err) {
-      setError(`Lỗi khi gọi API: ${err.message}`)
-      setConversation((prev) => [
-        ...prev,
-        { role: "assistant", content: `❌ Lỗi: ${err.message}` }
-      ])
-    } finally {
-      setLoadingAnswer(false)
-    }
+    setLoadingAnswer(false)
   }
 
   const findAllRelatedContent = async (keyword: string) => {
+    setLoadingAnswer(true)
     const { data, error } = await supabase.rpc("get_bookmarks_by_tag_name", {
       tag_name_param: keyword,
       user_id_param: user?.id
     })
 
-    if (!error) {
-      console.log("Bookmarks theo tag:", data)
+    const newAssistantMessage = {
+      role: "assistant",
+      content: !error ? data : "❌ " + "Đã xảy ra lỗi khi trả lời."
     }
+
+    setConversation((prev) => [...prev, newAssistantMessage])
+    setLoadingAnswer(false)
   }
 
   const handleLogin = async ({ email, password }: LoginForm) => {

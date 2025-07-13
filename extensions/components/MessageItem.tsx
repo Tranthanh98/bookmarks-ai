@@ -43,18 +43,16 @@ export default function MessageItem({ message, onReply }: MessageItemProps) {
           <>
             {Array.isArray(message.content) &&
               message.content.map((msg) => (
-                <div
-                  key={msg.id}
-                  className="bg-yellow-100 p-3 rounded-lg flex flex-col">
+                <div key={msg.id} className="flex flex-col">
                   <strong className="w-full pb-2">🐳 {msg.title}</strong>
                   <a
-                    className="cursor-pointer hover:text-blue-500 w-full"
+                    className="cursor-pointer hover:text-blue-500 w-full break-all"
                     href={msg.url}
                     target="_blank"
                     rel="noopener noreferrer">
                     {msg.url}
                   </a>
-                  <ul className="mt-2 list-disc pl-5 space-y-1">
+                  <ul className="bg-yellow-100 p-3 rounded-lg mt-2 list-disc pl-5 space-y-1">
                     {msg.key_info.main_points.map((infor) => (
                       <li key={infor}>{infor}</li>
                     ))}
