@@ -1,20 +1,15 @@
-import { type User } from "@supabase/supabase-js"
 import React, { useEffect, useRef, useState } from "react"
-
-import { Storage } from "@plasmohq/storage"
 
 import MessageItem from "~components/MessageItem"
 
 import "./style.css"
 
+import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
-import PanelLogin, { type LoginForm } from "~components/PanelLogin"
+import PanelLogin from "~components/PanelLogin"
 import { supabase } from "~core/supabase"
-
-const storage = new Storage({
-  area: "local"
-})
+import useAuth from "~hooks/useAuth"
 
 function IndexSidePanel() {
   const [conversation, setConversation] = useState([]) // chứa danh sách { role, content }
@@ -26,43 +21,24 @@ function IndexSidePanel() {
     null
   )
   const [suggestions, setSuggestions] = useState<string[]>([])
-  const [user, setUser] = useStorage<User>({
+  const [user] = useStorage({
     key: "user",
     instance: new Storage({
       area: "local"
     })
   })
+  const { handleLogout } = useAuth()
+
+  useEffect(() => {
+    ;(async () => {
+      console.log("render")
+      await supabase.auth.getUser()
+    })()
+  }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [conversation])
-
-  useEffect(() => {
-    const getSession = async () => {
-      const {
-        data: { session }
-      } = await supabase.auth.getSession()
-
-      if (session?.user) {
-        setUser(session.user)
-        await storage.set("accessToken", session.access_token)
-      }
-    }
-
-    getSession()
-
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        setUser(session.user)
-        await storage.set("accessToken", session.access_token)
-      } else {
-        setUser(null)
-      }
-    })
-    return () => subscription.unsubscribe()
-  }, [])
 
   const handleAskQuestion = async (e) => {
     e.preventDefault()
@@ -71,92 +47,66 @@ function IndexSidePanel() {
       return
     }
 
-    setLoadingAnswer(true)
+    try {
+      setLoadingAnswer(true)
 
-    const newUserMessage = { role: "user", content: question }
-    setConversation((prev) => [...prev, newUserMessage])
-    setQuestion("")
+      const newUserMessage = { role: "user", content: question }
+      setConversation((prev) => [...prev, newUserMessage])
+      setQuestion("")
 
-    const response = await chrome.runtime.sendMessage({
-      action: "ASK",
-      payload: {
-        question,
-        userId: user?.id
+      const response = await chrome.runtime.sendMessage({
+        action: "ASK",
+        payload: {
+          question,
+          userId: user?.id
+        }
+      })
+
+      const newAssistantMessage = {
+        role: "assistant",
+        content: response.success
+          ? response.data
+          : "❌ " + "Đã xảy ra lỗi khi trả lời."
       }
-    })
 
-    const newAssistantMessage = {
-      role: "assistant",
-      content: response.success
-        ? response.data
-        : "❌ " + "Đã xảy ra lỗi khi trả lời."
+      setConversation((prev) => [...prev, newAssistantMessage])
+      if (!error) {
+        const keywords = response.data.map((i) => i.key_info.keywords).flat()
+        setSuggestions([...new Set(keywords as string[])])
+      }
+    } finally {
+      setLoadingAnswer(false)
     }
-
-    setConversation((prev) => [...prev, newAssistantMessage])
-    if (!error) {
-      const keywords = response.data.map((i) => i.key_info.keywords).flat()
-      console.log("keywords", keywords)
-      setSuggestions([...new Set(keywords as string[])])
-    }
-    setLoadingAnswer(false)
   }
 
   const findAllRelatedContent = async (keyword: string) => {
     setLoadingAnswer(true)
-    const { data, error } = await supabase.rpc("get_bookmarks_by_tag_name", {
-      tag_name_param: keyword,
-      user_id_param: user?.id
-    })
+    try {
+      const { data, error } = await supabase.rpc("get_bookmarks_by_tag_name", {
+        tag_name_param: keyword,
+        user_id_param: user?.id
+      })
 
-    const newAssistantMessage = {
-      role: "assistant",
-      content: !error ? data : "❌ " + "Đã xảy ra lỗi khi trả lời."
+      const newAssistantMessage = {
+        role: "assistant",
+        content: !error ? data : "❌ " + "Đã xảy ra lỗi khi trả lời."
+      }
+
+      setConversation((prev) => [...prev, newAssistantMessage])
+    } finally {
+      setLoadingAnswer(false)
     }
-
-    setConversation((prev) => [...prev, newAssistantMessage])
-    setLoadingAnswer(false)
-  }
-
-  const handleLogin = async ({ email, password }: LoginForm) => {
-    setError(null)
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
-
-    if (error) {
-      setError(error.message)
-    }
-
-    if (data.user) {
-      setUser(data.user)
-    }
-  }
-
-  const handleSignup = async ({ email, password }: LoginForm) => {
-    setError(null)
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password
-    })
-
-    if (error) {
-      setError(error.message)
-    }
-
-    if (data.user) {
-      setUser(data.user)
-    }
-  }
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
   }
 
   if (!user) {
+    return <PanelLogin />
+  }
+
+  if (!user?.id) {
     return (
-      <PanelLogin onLogin={handleLogin} onSignup={handleSignup} error={error} />
+      <div className="flex m-auto justify-center align-middle">
+        Đang tải thông tin người dùng...
+      </div>
     )
   }
 
@@ -203,9 +153,8 @@ function IndexSidePanel() {
       <div className="flex flex-col space-y-2">
         <div className="flex space-x-1 px-4 max-w-full overflow-x-auto pb-4">
           {suggestions.map((data) => (
-            <div className="inline-block">
+            <div key={data} className="inline-block">
               <button
-                key={data}
                 onClick={() => findAllRelatedContent(data)}
                 className="max-w-[120px] truncate whitespace-nowrap overflow-hidden text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full shadow-sm transition disabled:opacity-50"
                 disabled={loadingAnswer}

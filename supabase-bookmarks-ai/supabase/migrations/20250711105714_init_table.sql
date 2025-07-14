@@ -3,15 +3,21 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Tạo bảng bookmarks
 CREATE TABLE bookmarks (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), -- ID duy nhất cho mỗi đánh dấu trang
+    id bigserial PRIMARY KEY, -- ID duy nhất cho mỗi đánh dấu trang
     browser_bookmark_id bigint NOT null DEFAULT 0,
+    parent_id bigint,
+    parent_name text,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE, -- ID người dùng để liên kết đánh dấu trang với người dùng cụ thể
-    url TEXT NOT NULL UNIQUE, -- URL của trang được đánh dấu, đảm bảo duy nhất
+    url TEXT NOT NULL, -- URL của trang được đánh dấu, đảm bảo duy nhất
     title TEXT, -- Tiêu đề của trang
     summary TEXT, -- Tóm tắt nội dung trang được tạo bởi AI
     key_info JSONB, -- Thông tin chính được trích xuất, lưu dưới dạng JSON
     embedding VECTOR(768), -- Vector nhúng của tóm tắt. Kích thước 768 là phổ biến cho các mô hình nhúng (ví dụ: Sentence Transformers). Bạn có thể điều chỉnh tùy theo mô hình bạn sử dụng.
-    created_at TIMESTAMPTZ DEFAULT NOW() -- Thời gian tạo đánh dấu trang
+    is_delete boolean not null DEFAULT FALSE,
+    updated_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(), -- Thời gian tạo đánh dấu trang
+
+    CONSTRAINT unique_url_per_user UNIQUE (url, user_id)
 );
 
 -- Tùy chọn: Thêm chỉ mục để tăng tốc tìm kiếm vector
@@ -22,17 +28,13 @@ CREATE INDEX ON bookmarks USING ivfflat (embedding vector_l2_ops) WITH (lists = 
 ALTER TABLE bookmarks ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view their own bookmarks" ON bookmarks
-  FOR SELECT USING (auth.uid() = user_id);
+  FOR SELECT USING (true);
 
 CREATE POLICY "Users can insert their own bookmarks" ON bookmarks
   FOR INSERT WITH CHECK (auth.uid()= user_id);
 
 CREATE POLICY "Users can update their own bookmarks" ON bookmarks
   FOR UPDATE USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete their own bookmarks" ON bookmarks
-  FOR DELETE USING (auth.uid() = user_id);
-
 
     -- Tạo hàm RPC để tìm kiếm các đánh dấu trang tương tự dựa trên vector nhúng
 CREATE OR REPLACE FUNCTION match_bookmarks (
@@ -42,7 +44,7 @@ CREATE OR REPLACE FUNCTION match_bookmarks (
   user_id_param UUID
 )
 RETURNS TABLE (
-  id uuid,
+  id bigint,
   url text,
   title text,
   summary text,
@@ -63,6 +65,7 @@ BEGIN
   FROM bookmarks AS b
   WHERE
     b.user_id = user_id_param
+    AND (b.is_delete IS DISTINCT FROM TRUE)
     AND (b.embedding <#> query_embedding) * -1 >= match_threshold
   ORDER BY b.embedding <#> query_embedding
   LIMIT match_count;
@@ -71,7 +74,7 @@ $$;
 
 
 CREATE TABLE tags (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), -- ID duy nhất cho mỗi tag
+    id bigserial PRIMARY KEY, -- ID duy nhất cho mỗi tag
     name TEXT NOT NULL UNIQUE, -- Tên của tag, đảm bảo duy nhất
     created_at TIMESTAMPTZ DEFAULT NOW() -- Thời gian tạo tag
 );
@@ -90,8 +93,8 @@ CREATE POLICY "Users can insert tags" ON tags
 
 
 CREATE TABLE bookmark_tags (
-    bookmark_id UUID NOT NULL REFERENCES bookmarks(id) ON DELETE CASCADE, -- Khóa ngoại đến bảng bookmarks
-    tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE, -- Khóa ngoại đến bảng tags
+    bookmark_id bigint NOT NULL REFERENCES bookmarks(id) ON DELETE CASCADE, -- Khóa ngoại đến bảng bookmarks
+    tag_id bigint NOT NULL REFERENCES tags(id) ON DELETE CASCADE, -- Khóa ngoại đến bảng tags
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE , -- ID người dùng để đảm bảo RLS nhất quán
     PRIMARY KEY (bookmark_id, tag_id), -- Khóa chính kép để đảm bảo tính duy nhất của cặp bookmark-tag
     created_at TIMESTAMPTZ DEFAULT NOW() -- Thời gian tạo mối quan hệ
@@ -115,7 +118,7 @@ CREATE OR REPLACE FUNCTION get_bookmarks_by_tag_name (
   user_id_param UUID     -- ID người dùng để lọc kết quả
 )
 RETURNS TABLE (
-  id uuid,
+  id bigint,
   url text,
   title text,
   summary text,
@@ -137,6 +140,7 @@ BEGIN
   JOIN bookmark_tags AS bt ON b.id = bt.bookmark_id
   JOIN tags AS t ON bt.tag_id = t.id
   WHERE t.name = tag_name_param
+    AND b.is_delete is not FALSE
     AND (b.user_id = user_id_param); -- Đảm bảo chỉ trả về bookmark của người dùng hiện tại
 END;
 $$;

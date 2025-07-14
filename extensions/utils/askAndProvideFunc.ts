@@ -82,7 +82,7 @@ export const askAndProvideCallingFunc = async (text: string) => {
       return functionCall
     } else {
       console.warn("Cấu trúc phản hồi từ Gemini API không mong muốn:", result)
-      return { summary: "Không thể tìm kiếm thông tin.", key_info: {} }
+      return { functionCall: undefined, isFailed: true }
     }
   } catch (error) {
     console.error("Lỗi trong quá trình gọi Gemini API:", error)

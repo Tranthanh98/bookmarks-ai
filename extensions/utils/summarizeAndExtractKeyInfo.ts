@@ -9,7 +9,7 @@ export const summarizeAndExtractKeyInfo = async (
   const prompt = `Trích xuất nội dung trang web dựa vào URL mà tôi cung cấp.
   **Hướng dẫn chi tiết:**
   3.  **Tóm tắt (Summary):** Tạo một bản tóm tắt súc tích, mạch lạc (khoảng 3-5 câu) bao gồm các điểm chính, chủ đề bao trùm và bất kỳ kết luận hoặc khuyến nghị nào từ trang.
-  4.  **Từ khóa (Keywords):** Xác định các từ và cụm từ xuất hiện thường xuyên hoặc có ý nghĩa quan trọng trong nội dung, thể hiện chủ đề và các khái niệm cốt lõi. Cung cấp ít nhất 7 từ khóa.
+  4.  **Từ khóa (Keywords):** Xác định Lĩnh vực nội dung bài viết hoặc có ý nghĩa quan trọng trong nội dung, thể hiện chủ đề và các khái niệm cốt lõi. ví duk: Showbiz, Công nghệ, ReactJs, Supabase,...
   5.  **Ý chính (Main Points):** Phân tích cấu trúc và logic của bài viết để xác định 3-6 ý chính riêng biệt mà nội dung trang muốn truyền tải. Mỗi ý chính nên là một câu hoàn chỉnh và độc lập.
 
   Trích xuất các thông tin chính dưới dạng JSON.

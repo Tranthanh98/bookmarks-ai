@@ -7,10 +7,6 @@ import { useStorage } from "@plasmohq/storage/hook"
 import type { LoginForm } from "~components/PanelLogin"
 import { supabase } from "~core/supabase"
 
-const storage = new Storage({
-  area: "local"
-})
-
 export default function useAuth() {
   const [error, setError] = useState("")
 
@@ -30,10 +26,18 @@ export default function useAuth() {
 
     if (error) {
       setError(error.message)
+      return
     }
 
-    if (data.user) {
-      setUser(data.user)
+    // if (data.user) {
+    //   setUser(data.user)
+    // }
+    // Lấy lại session để đảm bảo access_token đã sẵn sàng
+    const sessionResult = await supabase.auth.getSession()
+    if (sessionResult.data.session?.user) {
+      setUser(sessionResult.data.session.user)
+    } else {
+      setUser(data.user) // fallback
     }
   }
 
@@ -61,7 +65,6 @@ export default function useAuth() {
   return {
     user,
     error,
-    setUser,
     handleLogin,
     handleSignup,
     handleLogout

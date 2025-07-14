@@ -1,5 +1,5 @@
 create or replace function insert_bookmark_tags(
-  p_bookmark_id uuid,
+  p_bookmark_id bigint,
   p_user_id UUID,
   p_tag_names text[]
 )
@@ -8,7 +8,7 @@ language plpgsql
 as $$
 declare
   tag_name text;
-  v_tag_id uuid;
+  v_tag_id bigint;
 begin
   foreach tag_name in array p_tag_names loop
     -- Insert tag nếu chưa có

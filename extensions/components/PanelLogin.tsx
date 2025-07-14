@@ -1,24 +1,19 @@
 import React, { useState } from "react"
 
+import useAuth from "~hooks/useAuth"
+
 export interface LoginForm {
   email: string
   password: string
 }
 
-interface PanelLoginProps {
-  error: string
-  onLogin: (form: LoginForm) => Promise<void>
-  onSignup: (form: LoginForm) => Promise<void>
-}
-export default function PanelLogin({
-  error,
-  onLogin,
-  onSignup
-}: PanelLoginProps) {
+export default function PanelLogin() {
   const [formData, setFormData] = useState<LoginForm>({
     email: null,
     password: null
   })
+
+  const { handleLogin: onLogin, handleSignup: onSignup, error } = useAuth()
 
   const [mode, setMode] = useState<"login" | "signup">("login")
 
