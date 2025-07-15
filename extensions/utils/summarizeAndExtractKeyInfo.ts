@@ -2,14 +2,18 @@ const API_KEY = process.env.PLASMO_PUBLIC_GEMINI_API_KEY
 
 export const summarizeAndExtractKeyInfo = async (
   text: string
-): Promise<{ summary: string; key_info: Record<string, any> }> => {
+): Promise<{
+  summary: string
+  key_info: Record<string, any>
+  is_summarized?: boolean
+}> => {
   const apiKey = API_KEY
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
 
   const prompt = `Trích xuất nội dung trang web dựa vào URL mà tôi cung cấp.
   **Hướng dẫn chi tiết:**
   3.  **Tóm tắt (Summary):** Tạo một bản tóm tắt súc tích, mạch lạc (khoảng 3-5 câu) bao gồm các điểm chính, chủ đề bao trùm và bất kỳ kết luận hoặc khuyến nghị nào từ trang.
-  4.  **Từ khóa (Keywords):** Xác định Lĩnh vực nội dung bài viết hoặc có ý nghĩa quan trọng trong nội dung, thể hiện chủ đề và các khái niệm cốt lõi. ví duk: Showbiz, Công nghệ, ReactJs, Supabase,...
+  4.  **Từ khóa (Keywords):** Xác định Lĩnh vực nội dung bài viết, thể hiện chủ đề và các khái niệm cốt lõi. ví duk: Showbiz, Công nghệ, ReactJs, Supabase,...
   5.  **Ý chính (Main Points):** Phân tích cấu trúc và logic của bài viết để xác định 3-6 ý chính riêng biệt mà nội dung trang muốn truyền tải. Mỗi ý chính nên là một câu hoàn chỉnh và độc lập.
 
   Trích xuất các thông tin chính dưới dạng JSON.
@@ -20,7 +24,8 @@ export const summarizeAndExtractKeyInfo = async (
     system_instruction: {
       parts: [
         {
-          text: `Bạn là một AI có khả năng trích xuất thông tin thông minh từ các URL. Người dùng sẽ cung cấp một URL của trang web. Nhiệm vụ của bạn là phân tích nội dung trang và cung cấp.`
+          text: `Bạn là một AI có khả năng trích xuất thông tin thông minh từ các URL. Người dùng sẽ cung cấp một URL của trang web. Nhiệm vụ của bạn là phân tích nội dung trang và cung cấp.
+          Nếu trang web không có nội dung hoặc là SPA, internal app, thì trả về 'is_summarized' = false`
         }
       ]
     },
@@ -37,9 +42,10 @@ export const summarizeAndExtractKeyInfo = async (
               keywords: { type: "ARRAY", items: { type: "STRING" } },
               main_points: { type: "ARRAY", items: { type: "STRING" } }
             }
-          }
+          },
+          is_summarized: { type: "BOOLEAN" }
         },
-        required: ["summary", "key_info"]
+        required: ["summary", "key_info", "is_summarized"]
       }
     }
   }
@@ -72,7 +78,11 @@ export const summarizeAndExtractKeyInfo = async (
       return parsedJson
     } else {
       console.warn("Cấu trúc phản hồi từ Gemini API không mong muốn:", result)
-      return { summary: "Không thể tóm tắt.", key_info: {} }
+      return {
+        summary: "Không thể tóm tắt.",
+        key_info: {},
+        is_summarized: false
+      }
     }
   } catch (error) {
     console.error("Lỗi trong quá trình gọi Gemini API:", error)

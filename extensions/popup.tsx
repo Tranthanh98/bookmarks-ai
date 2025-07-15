@@ -194,7 +194,7 @@ const Popup = () => {
   const handleSyncBookmarks = async () => {
     setIsShowSyncMessage(false)
     chrome.runtime.sendMessage({
-      type: "SYNC_BOOKMARKS"
+      action: "SYNC_BOOKMARKS"
     })
   }
 

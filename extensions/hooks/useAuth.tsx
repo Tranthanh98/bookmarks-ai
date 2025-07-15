@@ -19,25 +19,25 @@ export default function useAuth() {
 
   const handleLogin = async ({ email, password }: LoginForm) => {
     setError(null)
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
 
-    if (error) {
-      setError(error.message)
-      return
-    }
+      if (error) {
+        setError(error.message)
+        throw error
+      }
 
-    // if (data.user) {
-    //   setUser(data.user)
-    // }
-    // Lấy lại session để đảm bảo access_token đã sẵn sàng
-    const sessionResult = await supabase.auth.getSession()
-    if (sessionResult.data.session?.user) {
-      setUser(sessionResult.data.session.user)
-    } else {
-      setUser(data.user) // fallback
+      const sessionResult = await supabase.auth.getSession()
+      if (sessionResult.data.session?.user) {
+        setUser(sessionResult.data.session.user)
+      } else {
+        setUser(data.user) // fallback
+      }
+    } catch (err) {
+      console.log("lỗi lạ:", err)
     }
   }
 

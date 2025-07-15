@@ -1,3 +1,4 @@
+import { MixerHorizontalIcon } from "@radix-ui/react-icons"
 import React, { useEffect, useRef, useState } from "react"
 
 import MessageItem from "~components/MessageItem"
@@ -8,6 +9,13 @@ import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
 import PanelLogin from "~components/PanelLogin"
+import PopoverUI from "~components/Popover"
+import {
+  MATCH_THRESHOLD,
+  matchThresholdOptions,
+  type MatchThresholdValue
+} from "~constant/matchThreshold"
+import { STORAGE_KEYS } from "~constant/storageKeys"
 import { supabase } from "~core/supabase"
 import useAuth from "~hooks/useAuth"
 
@@ -20,14 +28,31 @@ function IndexSidePanel() {
   const [referTextQuestion, setReferTextQuestion] = useState<string | null>(
     null
   )
+
+  const [matchThreshold, setMatchThreshold] = useState<MatchThresholdValue>(
+    MATCH_THRESHOLD.MEDIUM
+  )
+
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [user] = useStorage({
-    key: "user",
+    key: STORAGE_KEYS.User,
     instance: new Storage({
       area: "local"
     })
   })
   const { handleLogout } = useAuth()
+
+  const textareaRef = useRef(null)
+
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (textarea) {
+      // Reset height về "auto" trước khi đo
+      textarea.style.height = "auto"
+      // Tự động đặt lại chiều cao theo nội dung
+      textarea.style.height = Math.min(textarea.scrollHeight, 3 * 24) + "px" // 3 dòng * 24px (hoặc điều chỉnh theo line-height thực tế)
+    }
+  }, [question])
 
   useEffect(() => {
     ;(async () => {
@@ -58,20 +83,27 @@ function IndexSidePanel() {
         action: "ASK",
         payload: {
           question,
-          userId: user?.id
+          userId: user?.id,
+          match_threshold: matchThreshold
         }
       })
 
+      const getContent = () => {
+        if (!response.success) return "❌ " + "Đã xảy ra lỗi khi trả lời."
+        if (response?.data?.length === 0) {
+          return "Không có bookmark nào liên quan"
+        }
+        return response.data
+      }
+
       const newAssistantMessage = {
         role: "assistant",
-        content: response.success
-          ? response.data
-          : "❌ " + "Đã xảy ra lỗi khi trả lời."
+        content: getContent()
       }
 
       setConversation((prev) => [...prev, newAssistantMessage])
       if (!error) {
-        const keywords = response.data.map((i) => i.key_info.keywords).flat()
+        const keywords = response.data.map((i) => i.key_info?.keywords).flat()
         setSuggestions([...new Set(keywords as string[])])
       }
     } finally {
@@ -87,9 +119,15 @@ function IndexSidePanel() {
         user_id_param: user?.id
       })
 
+      const getContent = () => {
+        if (error) return "❌ " + "Đã xảy ra lỗi khi trả lời."
+        if (data?.length === 0) return "Không có bookmark nào liên quan"
+        return data
+      }
+
       const newAssistantMessage = {
         role: "assistant",
-        content: !error ? data : "❌ " + "Đã xảy ra lỗi khi trả lời."
+        content: getContent()
       }
 
       setConversation((prev) => [...prev, newAssistantMessage])
@@ -196,20 +234,24 @@ function IndexSidePanel() {
 
       <form
         onSubmit={handleAskQuestion}
-        className="p-4 bg-white shadow-inner flex items-center space-x-2 border-t border-gray-300">
+        className="px-4 pt-2 bg-white shadow-inner flex items-center space-x-2 border-t border-gray-300">
         <div className="relative flex-1">
-          <input
-            type="text"
+          <textarea
             placeholder="Tìm kiếm bookmark của bạn"
-            className="w-full p-2.5 pl-10 border rounded-lg focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2.5 pl-4 border rounded-lg focus:ring-blue-500 focus:border-blue-500 resize-none overflow-auto hide-scrollbar"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             disabled={loadingAnswer}
             required
+            rows={1}
+            ref={textareaRef}
+            style={{
+              maxHeight: "72px", // Giới hạn tối đa 3 dòng (3 * line-height)
+              lineHeight: "24px",
+              scrollbarWidth: "none", // Firefox
+              msOverflowStyle: "none"
+            }}
           />
-          <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-            🛠
-          </div>
         </div>
         <button
           type="submit"
@@ -218,6 +260,27 @@ function IndexSidePanel() {
           {loadingAnswer ? "..." : "Hỏi"}
         </button>
       </form>
+      <div className="px-4 py-2 bg-white shadow-inner flex items-left space-x-2">
+        <PopoverUI
+          triggerElement={
+            <button className="text-gray-900 bg-white border border-gray-300 focus:ring-gray-100 hover:bg-gray-100 cursor-pointer p-1 rounded-lg">
+              <MixerHorizontalIcon className="w-5 h-5" />
+            </button>
+          }>
+          <div className="p-1 text-left text-gray-900 flex flex-col gap-2">
+            <p className="font-medium">Độ chính xác</p>
+            {matchThresholdOptions.map((m) => (
+              <a
+                href="#"
+                key={m.value}
+                onClick={() => setMatchThreshold(m.value)}
+                className={`text-center block px-4 py-2 rounded-lg border border-gray-300 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition ${matchThreshold === m.value ? " border-blue-300 bg-blue-100" : ""}`}>
+                {m.title}
+              </a>
+            ))}
+          </div>
+        </PopoverUI>
+      </div>
     </div>
   )
 }

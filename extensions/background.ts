@@ -2,10 +2,13 @@ import { Storage } from "@plasmohq/storage"
 
 import { createBookmark } from "~background-service/sync-bookmark"
 import { FUNC_NAME } from "~constant/functionName"
+import { MATCH_THRESHOLD } from "~constant/matchThreshold"
+import { STORAGE_KEYS } from "~constant/storageKeys"
 import { supabase } from "~core/supabase"
 import { askAndProvideCallingFunc } from "~utils/askAndProvideFunc"
 import { getAllBookmarkUrls } from "~utils/bookmarkHelpers"
 import { getUserId } from "~utils/getUserId"
+import { sleep } from "~utils/sleep"
 import { semanticSearch } from "~utils/supabase-queries/semanticSearch"
 
 import type { BookmarkType } from "./utils/bookmarkHelpers"
@@ -15,12 +18,16 @@ const storage = new Storage({
   area: "local"
 })
 
+const getSyncStatus = async () => {
+  return (await storage.getItem(STORAGE_KEYS.SyncStatus)) ?? false
+}
+
 supabase.auth.onAuthStateChange(async (event, session) => {
   const userId = await getUserId()
   if (event === "SIGNED_OUT") {
-    await storage.setItem("user", null)
+    await storage.setItem(STORAGE_KEYS.User, null)
   } else if (!userId || userId != session?.user?.id) {
-    await storage.setItem("user", session?.user)
+    await storage.setItem(STORAGE_KEYS.User, session?.user)
   }
 })
 
@@ -28,7 +35,7 @@ supabase.auth.onAuthStateChange(async (event, session) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "ASK") {
     ;(async () => {
-      const { userId, question } = request.payload
+      const { userId, question, match_threshold } = request.payload
       try {
         const functionCall = await askAndProvideCallingFunc(question)
         if (!functionCall)
@@ -49,7 +56,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }
           case FUNC_NAME.SemanticSearch: {
             const textSearch = functionCall.args.textSearch
-            const data = await semanticSearch(userId, textSearch)
+            const data = await semanticSearch(
+              userId,
+              textSearch,
+              match_threshold ?? MATCH_THRESHOLD.MEDIUM
+            )
             sendResponse({
               success: true,
               data
@@ -59,7 +70,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
       } catch (error) {
         console.log(error, "call semantic search")
-        const data = await semanticSearch(userId, question)
+        const data = await semanticSearch(
+          userId,
+          question,
+          match_threshold ?? MATCH_THRESHOLD.MEDIUM
+        )
         sendResponse({
           success: true,
           data
@@ -102,22 +117,57 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
       }
 
-      await storage.setItem("unsyncBookmarks", bookmarksToSync)
+      await storage.setItem(STORAGE_KEYS.UnsyncBookmarks, bookmarksToSync)
     })()
   }
-  if (request.action === "SYNC") {
+  if (request.action === "SYNC_BOOKMARKS") {
     ;(async () => {
-      const syncBookmarks =
-        await storage.getItem<BookmarkType[]>("unsyncBookmarks")
-      for (const bm of syncBookmarks) {
+      const syncStatus = await getSyncStatus()
+      console.log("syncStatus", syncStatus)
+      if (syncStatus) {
+        console.log("being syncning")
+        return
       }
+
+      const unsyncBookmarks = await storage.getItem<BookmarkType[]>(
+        STORAGE_KEYS.UnsyncBookmarks
+      )
+
+      if (unsyncBookmarks?.length === 0) {
+        await storage.setItem(STORAGE_KEYS.SyncStatus, false)
+        return
+      }
+
+      await storage.setItem(STORAGE_KEYS.SyncStatus, true)
+
+      let isContinueLoop = true
+
+      const successSyncs = []
+
+      for (const bm of unsyncBookmarks) {
+        if (!isContinueLoop) break
+        try {
+          await createBookmark(bm.id, { ...bm })
+          successSyncs.push(bm)
+          await sleep(2000)
+        } catch (err) {
+          console.log("failed at", err, bm)
+          await storage.setItem(STORAGE_KEYS.SyncStatus, false)
+          isContinueLoop = false
+        }
+      }
+
+      const remainingSyncs = unsyncBookmarks.filter(
+        (i) => !successSyncs.includes(i)
+      )
+
+      await storage.setItem(STORAGE_KEYS.UnsyncBookmarks, remainingSyncs)
     })()
   }
 })
 
 // catch bookmark event
 chrome.bookmarks.onCreated.addListener((id, bookmark) => {
-  console.log("Bookmark mới được tạo:", id, bookmark)
   ;(async () => {
     await createBookmark(id, {
       id: id,
@@ -129,7 +179,6 @@ chrome.bookmarks.onCreated.addListener((id, bookmark) => {
 })
 
 chrome.bookmarks.onRemoved.addListener(async (id) => {
-  console.log("Process xoá bookmark id:", id)
   const userId = await getUserId()
 
   const { error } = await supabase

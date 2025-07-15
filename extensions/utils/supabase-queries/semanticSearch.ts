@@ -1,15 +1,21 @@
+import type { MatchThresholdValue } from "~constant/matchThreshold"
 import { supabase } from "~core/supabase"
 import { generateEmbedding } from "~utils/embeddingingText"
 
-export const semanticSearch = async (userId: string, text: string) => {
+export const semanticSearch = async (
+  userId: string,
+  text: string,
+  match_threshold: MatchThresholdValue = 0.65
+) => {
   try {
     const queryEmbedding = await generateEmbedding(text)
 
-    const { data, error } = await supabase.rpc("match_bookmarks", {
+    const { data, error } = await supabase.rpc("match_bookmarks_hybrid", {
+      query_text: text,
       query_embedding: queryEmbedding,
-      match_threshold: 0.65, // Ngưỡng tương tự (điều chỉnh khi cần)
-      match_count: 10, // Số lượng kết quả trả về
-      user_id_param: userId // Truyền user_id để lọc kết quả
+      match_count: 10,
+      user_id_param: userId,
+      match_threshold
     })
 
     if (error) throw error

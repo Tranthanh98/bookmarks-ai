@@ -17,7 +17,8 @@ export default function PanelLogin() {
 
   const [mode, setMode] = useState<"login" | "signup">("login")
 
-  const handleLogin = async () => {
+  const handleLogin = async (e) => {
+    e.preventDefault()
     if (mode === "login") {
       await onLogin(formData)
     } else {
@@ -57,7 +58,7 @@ export default function PanelLogin() {
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, email: e.target.value }))
                 }
-                className="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6"
+                className="w-full p-2.5 pl-4 border-solid border-blue-400 rounded-lg focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
@@ -86,7 +87,7 @@ export default function PanelLogin() {
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, password: e.target.value }))
                 }
-                className="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6"
+                className="w-full p-2.5 pl-4 border-solid border-blue-400 rounded-lg focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
